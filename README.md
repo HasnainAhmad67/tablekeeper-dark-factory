@@ -1,18 +1,9 @@
-# tablekeeper-dark-factory
-# Tablekeeper — Composable Floor
+@"
+# Composable Floor
 
-A restaurant reservation system built through a BAND-based multi-agent software factory.
+Team HJ's Tablekeeper project.
 
-The system models restaurant tables as physical units in a joinability graph. A reservation may claim a connected group of one to three tables.
+A restaurant reservation system with dynamically joinable table groups and strict double-booking prevention.
 
-Core invariant:
-
-Two confirmed reservations with overlapping time windows must never share a physical table.
-
-## Development Workflow
-
-Planner Agent → Builder Agent → Reviewer Agent
-
-## Status
-
-Project setup in progress.
+Status: Clean project baseline. Implementation will be planned and built through the Team HJ agent workflow.
+"@ | Set-Content .\README.md
