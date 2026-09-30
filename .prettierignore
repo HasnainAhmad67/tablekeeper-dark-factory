@@ -1,0 +1,11 @@
+node_modules
+.next
+coverage
+dist
+build
+playwright-report
+test-results
+package-lock.json
+.env.example
+plan.md
+architecture.json

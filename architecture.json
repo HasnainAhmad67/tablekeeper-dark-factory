@@ -1,0 +1,68 @@
+{
+  "kind": "layered",
+  "title": "Composable Floor Architecture",
+  "layers": [
+    {
+      "id": "browser",
+      "title": "Browser",
+      "items": [
+        { "id": "customer_ui", "label": "Customer UI" },
+        { "id": "staff_ui", "label": "Staff UI" },
+        { "id": "floor_3d", "label": "3D Floor (R3F)" },
+        { "id": "floor_2d", "label": "2D Floor (Canvas)" },
+        { "id": "design_system", "label": "Design System" },
+        { "id": "query_client", "label": "TanStack Query" }
+      ]
+    },
+    {
+      "id": "api",
+      "title": "API",
+      "items": [
+        { "id": "restaurant_api", "label": "Restaurant API" },
+        { "id": "availability_api", "label": "Availability API" },
+        { "id": "reservation_api", "label": "Reservation API" },
+        { "id": "staff_api", "label": "Staff API" },
+        { "id": "table_api", "label": "Table/Group API" },
+        { "id": "auth_api", "label": "Auth API" }
+      ]
+    },
+    {
+      "id": "domain",
+      "title": "Domain",
+      "items": [
+        { "id": "availability_engine", "label": "Availability Engine" },
+        { "id": "reservation_service", "label": "Reservation Service" },
+        { "id": "conflict_detector", "label": "Conflict Detector" },
+        { "id": "status_machine", "label": "Status Machine" },
+        { "id": "timezone_service", "label": "Timezone Service" }
+      ]
+    },
+    {
+      "id": "database",
+      "title": "Database",
+      "items": [
+        { "id": "postgres", "label": "PostgreSQL" },
+        { "id": "rls", "label": "RLS Policies" },
+        { "id": "constraints", "label": "Exclusion Constraints" },
+        { "id": "triggers", "label": "Triggers" },
+        { "id": "realtime", "label": "Realtime" }
+      ]
+    }
+  ],
+  "flows": [
+    { "from": "customer_ui", "to": "restaurant_api", "label": "HTTPS/JSON" },
+    { "from": "customer_ui", "to": "availability_api", "label": "HTTPS/JSON" },
+    { "from": "staff_ui", "to": "staff_api", "label": "HTTPS/JSON" },
+    { "from": "floor_3d", "to": "availability_api", "label": "HTTPS/JSON" },
+    { "from": "floor_2d", "to": "availability_api", "label": "HTTPS/JSON" },
+    { "from": "restaurant_api", "to": "availability_engine", "label": "function" },
+    { "from": "availability_api", "to": "availability_engine", "label": "function" },
+    { "from": "reservation_api", "to": "reservation_service", "label": "function" },
+    { "from": "staff_api", "to": "reservation_service", "label": "function" },
+    { "from": "table_api", "to": "postgres", "label": "SQL" },
+    { "from": "availability_engine", "to": "postgres", "label": "SQL" },
+    { "from": "reservation_service", "to": "postgres", "label": "SQL" },
+    { "from": "postgres", "to": "realtime", "label": "WAL" },
+    { "from": "realtime", "to": "staff_ui", "label": "WebSocket" }
+  ]
+}
