@@ -1,5 +1,8 @@
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
+import dotenv from "dotenv";
+
+dotenv.config({ path: ".env.local" });
 
 export default defineConfig({
   // Vitest 5 transforms via Oxc and does not default the JSX runtime, so it
@@ -17,5 +20,7 @@ export default defineConfig({
   test: {
     include: ['tests/**/*.test.{ts,tsx}'],
     environment: 'node',
+    testTimeout: 15000,
+    hookTimeout: 15000,
   },
 });
