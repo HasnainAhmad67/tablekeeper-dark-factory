@@ -274,3 +274,269 @@ export async function deleteTable(
     throw new Error(`Failed to delete table: ${error.message}`);
   }
 }
+
+export interface GroupInput {
+  name?: unknown;
+  description?: unknown;
+  table_ids?: unknown;
+}
+
+const GROUP_COLUMNS =
+  'id, restaurant_id, name, description, created_at, updated_at';
+
+function assertObjectInput(input: unknown): asserts input is Record<string, unknown> {
+  if (input === null || typeof input !== 'object' || Array.isArray(input)) {
+    throw new FloorWriteError('VALIDATION', 'Body must be a JSON object');
+  }
+}
+
+function validateGroupName(value: unknown): string {
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    throw new FloorWriteError('VALIDATION', 'name must be a non-empty string');
+  }
+  return value.trim();
+}
+
+function validateDescription(value: unknown): string | null {
+  if (value === null) {
+    return null;
+  }
+  if (typeof value !== 'string') {
+    throw new FloorWriteError('VALIDATION', 'description must be a string or null');
+  }
+  return value;
+}
+
+function validateTableIds(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    throw new FloorWriteError('VALIDATION', 'table_ids must be an array of uuids');
+  }
+  const ids = [...new Set(value)];
+  for (const id of ids) {
+    if (typeof id !== 'string' || !UUID_RE.test(id)) {
+      throw new FloorWriteError('VALIDATION', 'every table_id must be a uuid string');
+    }
+  }
+  return ids;
+}
+
+/**
+ * Tenant check for member table ids.
+ *
+ * table_group_members has no composite foreign key tying table_id to the
+ * group's restaurant, so every member id is verified here to belong to
+ * restaurantId before any write.
+ */
+async function assertTablesInRestaurant(
+  client: SupabaseClient,
+  tableIds: string[],
+  restaurantId: string,
+): Promise<void> {
+  if (tableIds.length === 0) {
+    return;
+  }
+  const { data, error } = await client
+    .from('tables')
+    .select('id')
+    .eq('restaurant_id', restaurantId)
+    .in('id', tableIds);
+
+  if (error) {
+    throw new Error(`Table lookup failed: ${error.message}`);
+  }
+  const found = new Set((data ?? []).map((row) => row.id));
+  if (tableIds.some((id) => !found.has(id))) {
+    throw new FloorWriteError(
+      'VALIDATION',
+      'every table_id must belong to this restaurant',
+    );
+  }
+}
+
+async function findGroupInRestaurant(
+  client: SupabaseClient,
+  restaurantId: string,
+  groupId: string,
+) {
+  const { data, error } = await client
+    .from('table_groups')
+    .select('id')
+    .eq('id', groupId)
+    .eq('restaurant_id', restaurantId)
+    .limit(1);
+
+  if (error) {
+    throw new Error(`Group lookup failed: ${error.message}`);
+  }
+  if (!data || data.length === 0) {
+    throw new FloorWriteError('NOT_FOUND', 'Group not found in this restaurant');
+  }
+}
+
+async function replaceGroupMembers(
+  client: SupabaseClient,
+  groupId: string,
+  tableIds: string[],
+): Promise<void> {
+  const { error: deleteError } = await client
+    .from('table_group_members')
+    .delete()
+    .eq('group_id', groupId);
+
+  if (deleteError) {
+    throw new Error(`Failed to replace group members: ${deleteError.message}`);
+  }
+
+  if (tableIds.length > 0) {
+    const { error: insertError } = await client
+      .from('table_group_members')
+      .insert(tableIds.map((tableId) => ({ group_id: groupId, table_id: tableId })));
+
+    if (insertError) {
+      throw new Error(`Failed to add group members: ${insertError.message}`);
+    }
+  }
+}
+
+async function listGroupMemberIds(
+  client: SupabaseClient,
+  groupId: string,
+): Promise<string[]> {
+  const { data, error } = await client
+    .from('table_group_members')
+    .select('table_id')
+    .eq('group_id', groupId);
+
+  if (error) {
+    throw new Error(`Failed to load group members: ${error.message}`);
+  }
+  return (data ?? []).map((row) => row.table_id).sort();
+}
+
+/** Create a table group in a restaurant the caller manages. */
+export async function createGroup(
+  client: SupabaseClient,
+  userId: string,
+  restaurantId: string,
+  input: GroupInput,
+) {
+  assertObjectInput(input);
+  await requireManagerOrOwner(client, userId, restaurantId);
+
+  const name = validateGroupName(input.name);
+  const description =
+    input.description === undefined ? null : validateDescription(input.description);
+  const tableIds =
+    input.table_ids === undefined ? [] : validateTableIds(input.table_ids);
+  await assertTablesInRestaurant(client, tableIds, restaurantId);
+
+  const { data, error } = await client
+    .from('table_groups')
+    .insert({ restaurant_id: restaurantId, name, description })
+    .select(GROUP_COLUMNS)
+    .single();
+
+  if (error) {
+    throw new Error(`Failed to create group: ${error.message}`);
+  }
+
+  if (tableIds.length > 0) {
+    await replaceGroupMembers(client, data.id, tableIds);
+  }
+
+  return { ...data, table_ids: [...tableIds].sort() };
+}
+
+/** Patch a table group (and optionally its member tables) in a restaurant the caller manages. */
+export async function updateGroup(
+  client: SupabaseClient,
+  userId: string,
+  restaurantId: string,
+  groupId: string,
+  input: GroupInput,
+) {
+  assertObjectInput(input);
+  await requireManagerOrOwner(client, userId, restaurantId);
+  await findGroupInRestaurant(client, restaurantId, groupId);
+
+  const patch: Record<string, unknown> = {};
+  if (input.name !== undefined) {
+    patch.name = validateGroupName(input.name);
+  }
+  if (input.description !== undefined) {
+    patch.description = validateDescription(input.description);
+  }
+  const hasTableIds = input.table_ids !== undefined;
+
+  if (Object.keys(patch).length === 0 && !hasTableIds) {
+    throw new FloorWriteError('VALIDATION', 'No updatable fields provided');
+  }
+
+  const tableIds = hasTableIds ? validateTableIds(input.table_ids) : null;
+  if (tableIds) {
+    await assertTablesInRestaurant(client, tableIds, restaurantId);
+  }
+
+  if (Object.keys(patch).length > 0) {
+    patch.updated_at = new Date().toISOString();
+    const { error } = await client
+      .from('table_groups')
+      .update(patch)
+      .eq('id', groupId)
+      .eq('restaurant_id', restaurantId);
+
+    if (error) {
+      throw new Error(`Failed to update group: ${error.message}`);
+    }
+  }
+
+  if (tableIds) {
+    await replaceGroupMembers(client, groupId, tableIds);
+  }
+
+  const { data, error } = await client
+    .from('table_groups')
+    .select(GROUP_COLUMNS)
+    .eq('id', groupId)
+    .eq('restaurant_id', restaurantId)
+    .single();
+
+  if (error) {
+    throw new Error(`Failed to load group: ${error.message}`);
+  }
+
+  const memberIds = tableIds ?? (await listGroupMemberIds(client, groupId));
+  return { ...data, table_ids: memberIds };
+}
+
+/** Delete a table group in a restaurant the caller manages. */
+export async function deleteGroup(
+  client: SupabaseClient,
+  userId: string,
+  restaurantId: string,
+  groupId: string,
+) {
+  await requireManagerOrOwner(client, userId, restaurantId);
+  await findGroupInRestaurant(client, restaurantId, groupId);
+
+  // Remove members explicitly first rather than relying on the FK cascade,
+  // so the caller's own RLS policies authorize every row touched.
+  const { error: memberError } = await client
+    .from('table_group_members')
+    .delete()
+    .eq('group_id', groupId);
+
+  if (memberError) {
+    throw new Error(`Failed to remove group members: ${memberError.message}`);
+  }
+
+  const { error } = await client
+    .from('table_groups')
+    .delete()
+    .eq('id', groupId)
+    .eq('restaurant_id', restaurantId);
+
+  if (error) {
+    throw new Error(`Failed to delete group: ${error.message}`);
+  }
+}

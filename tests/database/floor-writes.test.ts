@@ -25,11 +25,39 @@ const createdUsers: string[] = [];
 const createdMemberUserIds: string[] = [];
 const createdTableIds: string[] = [];
 
+// One authenticated user per role for this file. The remote Auth service
+// rate-limits anonymous signups, so tests share these clients instead of
+// signing up per test; each test still creates uniquely-named data via
+// testId(). Never share these across files — files run in parallel.
+type TestUser = Awaited<ReturnType<typeof createTestUser>>;
+let manager!: TestUser;
+let owner!: TestUser;
+let staff!: TestUser;
+let nonMember!: TestUser;
+
 beforeAll(async () => {
   const { error } = await serviceClient.from('restaurants').select('id').limit(1);
   if (error) {
     throw new Error(`Database connection failed: ${error.message}`);
   }
+
+  manager = await createTestUser();
+  createdUsers.push(manager.userId);
+  createdMemberUserIds.push(manager.userId);
+  await grantRole(manager.userId, 'manager');
+
+  owner = await createTestUser();
+  createdUsers.push(owner.userId);
+  createdMemberUserIds.push(owner.userId);
+  await grantRole(owner.userId, 'owner');
+
+  staff = await createTestUser();
+  createdUsers.push(staff.userId);
+  createdMemberUserIds.push(staff.userId);
+  await grantRole(staff.userId, 'staff');
+
+  nonMember = await createTestUser();
+  createdUsers.push(nonMember.userId);
 });
 
 async function grantRole(userId: string, role: string) {
@@ -43,10 +71,7 @@ async function grantRole(userId: string, role: string) {
 
 describe('table write access', () => {
   it('lets a manager create, update, and delete a table', async () => {
-    const { client, userId } = await createTestUser();
-    createdUsers.push(userId);
-    createdMemberUserIds.push(userId);
-    await grantRole(userId, 'manager');
+    const { client, userId } = manager;
 
     const label = testId('m4-table-mgr');
     const created = await createTable(client, userId, SEED.restaurantA, {
@@ -76,10 +101,7 @@ describe('table write access', () => {
   });
 
   it('lets an owner write and defaults shape/geometry', async () => {
-    const { client, userId } = await createTestUser();
-    createdUsers.push(userId);
-    createdMemberUserIds.push(userId);
-    await grantRole(userId, 'owner');
+    const { client, userId } = owner;
 
     const created = await createTable(client, userId, SEED.restaurantA, {
       label: testId('m4-table-owner'),
@@ -92,10 +114,7 @@ describe('table write access', () => {
   });
 
   it('denies a staff member write access (owner/manager only)', async () => {
-    const { client, userId } = await createTestUser();
-    createdUsers.push(userId);
-    createdMemberUserIds.push(userId);
-    await grantRole(userId, 'staff');
+    const { client, userId } = staff;
 
     await expect(
       createTable(client, userId, SEED.restaurantA, { label: 'x', capacity: 2 }),
@@ -111,18 +130,14 @@ describe('table write access', () => {
   });
 
   it('denies a non-member any write, including to restaurant B', async () => {
-    const { client, userId } = await createTestUser();
-    createdUsers.push(userId);
+    const { client, userId } = nonMember;
 
     await expect(
       createTable(client, userId, SEED.restaurantA, { label: 'x', capacity: 2 }),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
 
     // Manager of A touching B's table is rejected.
-    const { client: mgrClient, userId: mgrId } = await createTestUser();
-    createdUsers.push(mgrId);
-    createdMemberUserIds.push(mgrId);
-    await grantRole(mgrId, 'manager');
+    const { client: mgrClient, userId: mgrId } = manager;
 
     await expect(
       updateTable(mgrClient, mgrId, SEED.restaurantB, SEED.tableB1, { capacity: 8 }),
@@ -130,10 +145,7 @@ describe('table write access', () => {
   });
 
   it('rejects cross-restaurant table references and unknown tables', async () => {
-    const { client, userId } = await createTestUser();
-    createdUsers.push(userId);
-    createdMemberUserIds.push(userId);
-    await grantRole(userId, 'manager');
+    const { client, userId } = manager;
 
     // tableB1 belongs to restaurant B, not A.
     await expect(
@@ -146,10 +158,7 @@ describe('table write access', () => {
   });
 
   it('rejects invalid input and cross-restaurant section_id', async () => {
-    const { client, userId } = await createTestUser();
-    createdUsers.push(userId);
-    createdMemberUserIds.push(userId);
-    await grantRole(userId, 'manager');
+    const { client, userId } = manager;
 
     await expect(
       createTable(client, userId, SEED.restaurantA, { label: '', capacity: 2 }),
@@ -182,10 +191,7 @@ describe('table write access', () => {
   });
 
   it('update with no fields is a validation error', async () => {
-    const { client, userId } = await createTestUser();
-    createdUsers.push(userId);
-    createdMemberUserIds.push(userId);
-    await grantRole(userId, 'manager');
+    const { client, userId } = manager;
 
     await expect(
       updateTable(client, userId, SEED.restaurantA, SEED.tableT2, {}),
