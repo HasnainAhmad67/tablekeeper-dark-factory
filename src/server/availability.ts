@@ -8,10 +8,15 @@
  * default [starts_at, ends_at) half-open bounds, so two windows conflict if
  * and only if aStart < bEnd && bStart < aEnd.
  *
- * Operating hours are not consulted in this slice: the contract covers
- * capacity and conflicts only, and overnight hours remain unsupported per the
- * schema note in 001_initial_schema.sql (same-day hours only, deferred).
+ * Operating-hours gate: computeAvailability first evaluates the search window
+ * with src/server/hours.ts against the restaurant's operating_hours rows and
+ * restaurants.timezone; a closed window (or fail-closed validation) yields no
+ * options at all. Overnight hours remain unsupported per the schema note in
+ * 001_initial_schema.sql (same-day hours only) — cross-midnight windows are
+ * closed by evaluateOperatingHours.
  */
+
+import { evaluateOperatingHours, type HoursContext } from '@/server/hours';
 
 export class AvailabilityError extends Error {
   readonly code: 'VALIDATION';
@@ -68,6 +73,8 @@ export interface AvailabilityInput {
   groups: readonly GroupRecord[];
   members: readonly GroupMemberRecord[];
   assignments: readonly AssignmentRecord[];
+  /** Restaurant-local opening hours: the hours gate runs before capacity/conflict work. */
+  hours: HoursContext;
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -146,9 +153,24 @@ function rankByKind(option: AvailabilityOption): number {
  *   result set, none is busy, and the combined capacity covers the party.
  * - Ranking: smallest capacity surplus first, then single table before group,
  *   then stable id ascending.
+ * - The window must fit inside the restaurant's operating hours (see hours.ts);
+ *   a closed window short-circuits to an empty list.
  */
 export function computeAvailability(input: AvailabilityInput): AvailabilityOption[] {
-  const { params, tables, groups, members, assignments } = input;
+  const { params, tables, groups, members, assignments, hours } = input;
+
+  // Hours gate first: when the restaurant is closed for this window (or hours
+  // validation fails closed), there are no options regardless of capacity.
+  const hoursDecision = evaluateOperatingHours({
+    startsAt: params.startsAt,
+    endsAt: params.endsAt,
+    timeZone: hours.timeZone,
+    hours: hours.hours,
+  });
+  if (!hoursDecision.open) {
+    return [];
+  }
+
   const startsTime = Date.parse(params.startsAt);
   const endsTime = Date.parse(params.endsAt);
 

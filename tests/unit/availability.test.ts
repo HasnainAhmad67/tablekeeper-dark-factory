@@ -7,6 +7,7 @@ import {
   type AvailabilityInput,
   type AvailabilityParams,
 } from '@/server/availability';
+import type { OperatingHoursRecord } from '@/server/hours';
 
 const RESTAURANT_ID = '11111111-1111-4111-8111-111111111111';
 const T0 = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaa0000';
@@ -28,6 +29,15 @@ const BASE_PARAMS: AvailabilityParams = {
   partySize: 4,
 };
 
+// Default fixture hours: every weekday open around the clock so the hours
+// gate passes and existing capacity/conflict assertions stay unchanged.
+const OPEN_ALL_WEEK: OperatingHoursRecord[] = [0, 1, 2, 3, 4, 5, 6].map((dayOfWeek) => ({
+  day_of_week: dayOfWeek,
+  opens_at: '00:00:00',
+  closes_at: '23:59:59',
+  is_closed: false,
+}));
+
 function input(overrides: Partial<AvailabilityInput>): AvailabilityInput {
   return {
     params: BASE_PARAMS,
@@ -35,6 +45,7 @@ function input(overrides: Partial<AvailabilityInput>): AvailabilityInput {
     groups: [],
     members: [],
     assignments: [],
+    hours: { timeZone: 'America/New_York', hours: OPEN_ALL_WEEK },
     ...overrides,
   };
 }
@@ -438,6 +449,62 @@ describe('computeAvailability — empty results', () => {
           { table_id: T1, starts_at: '2026-06-01T17:00:00Z', ends_at: '2026-06-01T19:00:00Z' },
         ],
       }),
+    );
+    expect(options).toEqual([]);
+  });
+});
+
+describe('computeAvailability — operating-hours gate', () => {
+  const window: Array<{ id: string; label: string; capacity: number }> = [
+    { id: T1, label: 'T1', capacity: 6 },
+  ];
+
+  it('returns an empty list when the day has no hours row (closed)', () => {
+    const options = computeAvailability(
+      input({ tables: window, hours: { timeZone: 'America/New_York', hours: [] } }),
+    );
+    expect(options).toEqual([]);
+  });
+
+  it('returns an empty list when the day is marked is_closed', () => {
+    // 2026-06-01 is a Monday (day_of_week 1) in the restaurant timezone.
+    const options = computeAvailability(
+      input({
+        tables: window,
+        hours: {
+          timeZone: 'America/New_York',
+          hours: [
+            { day_of_week: 1, opens_at: '00:00:00', closes_at: '23:59:59', is_closed: true },
+          ],
+        },
+      }),
+    );
+    expect(options).toEqual([]);
+  });
+
+  it('keeps an in-hours window available and rejects an out-of-hours window', () => {
+    const hours = {
+      timeZone: 'America/New_York',
+      hours: [{ day_of_week: 1, opens_at: '11:00:00', closes_at: '22:00:00', is_closed: false }],
+    };
+    // 18:00-20:00Z = 14:00-16:00 local Monday — inside opening hours.
+    const open = computeAvailability(input({ tables: window, hours }));
+    expect(open.map((option) => option.id)).toEqual([T1]);
+
+    // 04:00-05:00Z = 00:00-01:00 local Monday — before the 11:00 open.
+    const closed = computeAvailability(
+      input({
+        params: { ...BASE_PARAMS, startsAt: '2026-06-01T04:00:00Z', endsAt: '2026-06-01T05:00:00Z' },
+        tables: window,
+        hours,
+      }),
+    );
+    expect(closed).toEqual([]);
+  });
+
+  it('fails closed when the restaurant timezone is invalid', () => {
+    const options = computeAvailability(
+      input({ tables: window, hours: { timeZone: 'Not/AZone', hours: OPEN_ALL_WEEK } }),
     );
     expect(options).toEqual([]);
   });

@@ -11,6 +11,7 @@ import {
   type GroupRecord,
   type TableRecord,
 } from '@/server/availability';
+import { evaluateOperatingHours, type HoursContext, type OperatingHoursRecord } from '@/server/hours';
 
 /**
  * GET /api/restaurants/[restaurantId]/availability (M4)
@@ -18,6 +19,9 @@ import {
  * Query: starts_at, ends_at (ISO 8601 with offset), party_size (positive int).
  * Any authenticated caller (guest or member) may search; anonymous requests
  * return 401. Responds with `{ options }`, ranked smallest surplus first.
+ * The operating-hours gate runs before any table/group/assignment query: a
+ * closed restaurant (missing hours row, is_closed, cross-midnight, or
+ * fail-closed timezone validation) responds `{ options: [] }` immediately.
  */
 export async function GET(
   request: Request,
@@ -51,6 +55,42 @@ export async function GET(
   }
 
   try {
+    // Hours context first: timezone + opening rows are needed before any
+    // availability work, so a closed window can short-circuit without the
+    // table/group/members/assignment queries below.
+    const [restaurantResult, hoursResult] = await Promise.all([
+      supabase.from('restaurants').select('timezone').eq('id', parsed.restaurantId).maybeSingle(),
+      supabase
+        .from('operating_hours')
+        .select('day_of_week, opens_at, closes_at, is_closed')
+        .eq('restaurant_id', parsed.restaurantId),
+    ]);
+    if (restaurantResult.error) {
+      throw new Error(`Failed to load restaurant: ${restaurantResult.error.message}`);
+    }
+    if (hoursResult.error) {
+      throw new Error(`Failed to load operating hours: ${hoursResult.error.message}`);
+    }
+    // Unknown restaurant: preserve the existing response behavior — an empty
+    // option list (the pre-hours route never had rows to return for it).
+    if (!restaurantResult.data) {
+      return NextResponse.json({ options: [] });
+    }
+
+    const hours: HoursContext = {
+      timeZone: restaurantResult.data.timezone,
+      hours: (hoursResult.data ?? []) as OperatingHoursRecord[],
+    };
+    const hoursDecision = evaluateOperatingHours({
+      startsAt: parsed.startsAt,
+      endsAt: parsed.endsAt,
+      timeZone: hours.timeZone,
+      hours: hours.hours,
+    });
+    if (!hoursDecision.open) {
+      return NextResponse.json({ options: [] });
+    }
+
     const [tablesResult, groupsResult] = await Promise.all([
       supabase.from('tables').select('id, label, capacity').eq('restaurant_id', parsed.restaurantId),
       supabase.from('table_groups').select('id, name').eq('restaurant_id', parsed.restaurantId),
@@ -107,6 +147,7 @@ export async function GET(
       groups,
       members,
       assignments: (assignments ?? []) as AssignmentRecord[],
+      hours,
     });
     return NextResponse.json({ options });
   } catch (err) {
