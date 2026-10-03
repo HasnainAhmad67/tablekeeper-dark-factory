@@ -21,8 +21,11 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <SkipLink />
         <AuthProvider>
           <SiteHeader />
+          {/* PageShell must nest inside AuthProvider: every page below it
+              calls useAuth(), and a context provider emits no DOM, so the
+              rendered markup and styling are unchanged. */}
+          <PageShell>{children}</PageShell>
         </AuthProvider>
-        <PageShell>{children}</PageShell>
         <SiteFooter />
       </body>
     </html>
