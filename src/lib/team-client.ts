@@ -24,6 +24,8 @@
  * otherwise inline for retry. No local persistence is invented here.
  */
 
+import { fetchStaffContext as fetchStaffContextShared } from '@/lib/fetchStaffContext';
+
 /** Editable invite values (form state). */
 export interface InviteFormValues {
   email: string;
@@ -43,7 +45,7 @@ export interface TeamMember {
   role: string;
 }
 
-/** First membership from GET /api/staff/me (single-restaurant MVP). */
+/** Staff membership from GET /api/staff/me — selected restaurant, else first. */
 export interface StaffContext {
   id: string;
   name: string;
@@ -107,21 +109,12 @@ async function request(path: string, init?: RequestInit): Promise<Record<string,
   return body;
 }
 
-/** First staff membership (single-restaurant MVP context), or null. */
+/**
+ * Selected staff membership (stored restaurant id from the Restaurant
+ * Switcher, falling back to the first membership), or null.
+ */
 export async function fetchStaffContext(): Promise<StaffContext | null> {
-  const body = await request('/api/staff/me');
-  const first = (Array.isArray(body.restaurants) ? body.restaurants : [])[0] as
-    | Partial<StaffContext>
-    | undefined;
-  if (!first || typeof first.id !== 'string') {
-    return null;
-  }
-  return {
-    id: first.id,
-    name: typeof first.name === 'string' ? first.name : '',
-    slug: typeof first.slug === 'string' ? first.slug : '',
-    role: typeof first.role === 'string' ? first.role : '',
-  };
+  return fetchStaffContextShared(request);
 }
 
 /** Coerce one untrusted member row; null when structurally invalid. */

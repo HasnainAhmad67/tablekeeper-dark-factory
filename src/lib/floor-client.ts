@@ -16,6 +16,7 @@
  * migration default, sort order to 0) and returned in sort order.
  */
 
+import { fetchStaffContext as fetchStaffContextShared } from '@/lib/fetchStaffContext';
 import { fetchTables, TableApiError, type StaffTable } from '@/lib/tables-client';
 
 export interface FloorSection {
@@ -31,7 +32,7 @@ export interface FloorData {
   tables: StaffTable[];
 }
 
-/** First membership from GET /api/staff/me (single-restaurant MVP). */
+/** Staff membership from GET /api/staff/me — selected restaurant, else first. */
 export interface StaffContext {
   id: string;
   name: string;
@@ -77,21 +78,12 @@ async function request(path: string): Promise<Record<string, unknown>> {
   return body;
 }
 
-/** First staff membership (single-restaurant MVP context), or null. */
+/**
+ * Selected staff membership (stored restaurant id from the Restaurant
+ * Switcher, falling back to the first membership), or null.
+ */
 export async function fetchStaffContext(): Promise<StaffContext | null> {
-  const body = await request('/api/staff/me');
-  const first = (Array.isArray(body.restaurants) ? body.restaurants : [])[0] as
-    | Partial<StaffContext>
-    | undefined;
-  if (!first || typeof first.id !== 'string') {
-    return null;
-  }
-  return {
-    id: first.id,
-    name: typeof first.name === 'string' ? first.name : '',
-    slug: typeof first.slug === 'string' ? first.slug : '',
-    role: typeof first.role === 'string' ? first.role : '',
-  };
+  return fetchStaffContextShared(request);
 }
 
 /** Floor sections, normalized and ordered by sort_order (then name). */
