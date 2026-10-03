@@ -48,6 +48,12 @@ export default function StaffPage() {
         >
           Tables
         </a>
+        <a
+          href="/staff/reservations"
+          className="text-sm font-medium text-foreground-muted underline-offset-4 hover:text-foreground hover:underline"
+        >
+          Reservations
+        </a>
       </nav>
       <div className="mt-6">
         <StaffOverview />

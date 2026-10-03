@@ -21,6 +21,11 @@ export default defineConfig({
     include: ['tests/**/*.test.{ts,tsx}'],
     environment: 'node',
     testTimeout: 30000,
-    hookTimeout: 30000,
+    // Remote-setup hooks (connection probes, fixture inserts, auth signups)
+    // queue behind the same throttled host as the tests themselves; under
+    // full-suite parallelism a 30s cap turned transient slowness in
+    // group-writes' beforeAll into 8 skipped tests. 60s absorbs the jitter
+    // without masking a genuinely hung setup (the hooks fail well before it).
+    hookTimeout: 60000,
   },
 });

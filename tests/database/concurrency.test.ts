@@ -101,19 +101,31 @@ describe('concurrency acceptance', () => {
     const key = testId('test-idempotent');
     testIds.push(key);
 
-    // Unique, non-conflicting interval for this run. Deriving the start from
-    // the current timestamp guarantees repeated runs never collide with seed
-    // data or with rows left behind by earlier runs. T2 belongs to restaurant A.
+    // Unique, non-conflicting interval for this run. The DATE is derived
+    // from the current timestamp (successive days never collide with seed
+    // data or with rows left behind by earlier runs), while the TIME-OF-DAY
+    // is pinned to 17:00-19:00 UTC — the same canonical valid window the
+    // hours-gate suite uses. Restaurant A (America/New_York, seed migration
+    // 005) seats 11:00-22:00 local on every weekday (23:00 Fri/Sat), and
+    // this window lands at 12:00-14:00 EST / 13:00-15:00 EDT — inside
+    // operating hours regardless of when the suite runs or the DST state.
+    // The previous form (start = now + 30 days at the current time-of-day)
+    // failed with SQLSTATE 22023 whenever the run fell outside that band,
+    // e.g. a 15:02 UTC start = 10:02 local, before opening. T2 belongs to
+    // restaurant A.
     const startMs = Date.now() + 30 * 24 * 60 * 60 * 1000; // 30 days out
-    const startsAt = new Date(startMs).toISOString();
-    const endsAt = new Date(startMs + 2 * 60 * 60 * 1000).toISOString();
+    const startsAt = new Date(startMs);
+    startsAt.setUTCHours(17, 0, 0, 0);
+    const endsAt = new Date(startsAt.getTime() + 2 * 60 * 60 * 1000);
+    const startsAtIso = startsAt.toISOString();
+    const endsAtIso = endsAt.toISOString();
 
     const payload = {
       p_restaurant_id: SEED.restaurantA,
       p_table_ids: [SEED.tableT2],
       p_party_size: 2,
-      p_starts_at: startsAt,
-      p_ends_at: endsAt,
+      p_starts_at: startsAtIso,
+      p_ends_at: endsAtIso,
       p_idempotency_key: key,
     };
 

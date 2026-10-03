@@ -36,39 +36,93 @@ let owner!: TestUser;
 let staff!: TestUser;
 let nonMember!: TestUser;
 
+/**
+ * Remote-setup resilience for this file's hooks (mirrors rls.test.ts).
+ *
+ * The hooks share a throttled host with the parallel test files: the
+ * connection probe and fixture insert return errors instead of throwing,
+ * and the four GoTrue signups hit the anonymous-signup rate limit. Both get
+ * three retries, 2s apart, before the hook fails for real — a transient
+ * slow round-trip no longer aborts the file (previously the 30s hookTimeout
+ * turned it into 8 skipped tests; hookTimeout is now 60s in vitest.config).
+ */
+const SETUP_MAX_RETRIES = 3;
+const SETUP_RETRY_DELAY_MS = 2000;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Run a hook step, retrying on a thrown/returned failure up to 3 times. */
+async function retrySetup<T>(label: string, fn: () => Promise<T>): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= SETUP_MAX_RETRIES + 1; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastError = err;
+      if (attempt > SETUP_MAX_RETRIES) {
+        break;
+      }
+      console.warn(
+        `${label} failed (attempt ${attempt}/${SETUP_MAX_RETRIES + 1}), ` +
+          `retrying in ${SETUP_RETRY_DELAY_MS}ms:`,
+        err instanceof Error ? err.message : err,
+      );
+      await sleep(SETUP_RETRY_DELAY_MS);
+    }
+  }
+  throw lastError;
+}
+
+/** createTestUser bounded-retry for GoTrue signup throttling (see rls.test.ts). */
+async function createTestUserWithRetry(): Promise<
+  Awaited<ReturnType<typeof createTestUser>>
+> {
+  return retrySetup('createTestUser', () => createTestUser());
+}
+
 beforeAll(async () => {
-  const { error } = await serviceClient.from('restaurants').select('id').limit(1);
-  if (error) {
-    throw new Error(`Database connection failed: ${error.message}`);
-  }
+  await retrySetup('database connection probe', async () => {
+    const { error } = await serviceClient.from('restaurants').select('id').limit(1);
+    if (error) {
+      throw new Error(`Database connection failed: ${error.message}`);
+    }
+  });
 
-  const { data, error: fixtureError } = await serviceClient
-    .from('table_groups')
-    .insert({ restaurant_id: SEED.restaurantB, name: testId('group-b') })
-    .select('id')
-    .single();
-  if (fixtureError || !data) {
-    throw new Error(`Fixture group setup failed: ${fixtureError?.message}`);
-  }
-  groupInRestaurantB = data.id;
-  createdGroupIds.push(data.id);
+  // The group name is generated once so retries after a lost response do
+  // not pile up distinct rows.
+  const groupName = testId('group-b');
+  const fixtureId = await retrySetup('fixture group setup', async () => {
+    const { data, error } = await serviceClient
+      .from('table_groups')
+      .insert({ restaurant_id: SEED.restaurantB, name: groupName })
+      .select('id')
+      .single();
+    if (error || !data) {
+      throw new Error(`Fixture group setup failed: ${error?.message}`);
+    }
+    return data.id;
+  });
+  groupInRestaurantB = fixtureId;
+  createdGroupIds.push(fixtureId);
 
-  manager = await createTestUser();
+  manager = await createTestUserWithRetry();
   createdUsers.push(manager.userId);
   createdMemberUserIds.push(manager.userId);
   await grantRole(manager.userId, 'manager');
 
-  owner = await createTestUser();
+  owner = await createTestUserWithRetry();
   createdUsers.push(owner.userId);
   createdMemberUserIds.push(owner.userId);
   await grantRole(owner.userId, 'owner');
 
-  staff = await createTestUser();
+  staff = await createTestUserWithRetry();
   createdUsers.push(staff.userId);
   createdMemberUserIds.push(staff.userId);
   await grantRole(staff.userId, 'staff');
 
-  nonMember = await createTestUser();
+  nonMember = await createTestUserWithRetry();
   createdUsers.push(nonMember.userId);
 });
 

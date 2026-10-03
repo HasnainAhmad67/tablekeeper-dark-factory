@@ -45,10 +45,51 @@ beforeAll(async () => {
   }
 });
 
+/**
+ * createTestUser with bounded retries for GoTrue signup throttling.
+ *
+ * The remote Auth service rate-limits anonymous signups (429); when the
+ * full suite runs, earlier files' ~40 signups can spill into this file and
+ * fail it outright (helpers.ts's createTestUser throws on any signup
+ * error). Retry up to 3 times with a fixed 2s delay — bounded so the
+ * worst case for a test that creates two users sequentially stays well
+ * under the 30s testTimeout — then rethrow the original error so a real
+ * failure still surfaces instead of skipping.
+ */
+const SIGNUP_MAX_RETRIES = 3;
+const SIGNUP_RETRY_DELAY_MS = 2000;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function createTestUserWithRetry(): Promise<
+  Awaited<ReturnType<typeof createTestUser>>
+> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= SIGNUP_MAX_RETRIES + 1; attempt++) {
+    try {
+      return await createTestUser();
+    } catch (err) {
+      lastError = err;
+      if (attempt > SIGNUP_MAX_RETRIES) {
+        break;
+      }
+      console.warn(
+        `createTestUser failed (attempt ${attempt}/${SIGNUP_MAX_RETRIES + 1}), ` +
+          `retrying in ${SIGNUP_RETRY_DELAY_MS}ms:`,
+        err instanceof Error ? err.message : err,
+      );
+      await sleep(SIGNUP_RETRY_DELAY_MS);
+    }
+  }
+  throw lastError;
+}
+
 describe('RLS policies', () => {
   it('enforces guest isolation - a guest cannot read or modify another guest\'s reservations', async () => {
-    const { client: clientA, userId: userA } = await createTestUser();
-    const { client: clientB, userId: userB } = await createTestUser();
+    const { client: clientA, userId: userA } = await createTestUserWithRetry();
+    const { client: clientB, userId: userB } = await createTestUserWithRetry();
     createdUsers.push(userA, userB);
 
     const key = testId('test-guest-isolation');
@@ -105,7 +146,7 @@ describe('RLS policies', () => {
   });
 
   it('prevents role escalation - a staff member cannot modify their own role to owner', async () => {
-    const { client: staffClient, userId: staffId } = await createTestUser();
+    const { client: staffClient, userId: staffId } = await createTestUserWithRetry();
     createdUsers.push(staffId);
     createdMemberships.push(staffId);
 
@@ -141,7 +182,7 @@ describe('RLS policies', () => {
   });
 
   it('enforces restaurant isolation - a member of one restaurant cannot modify another restaurant\'s tables', async () => {
-    const { client: userClient, userId } = await createTestUser();
+    const { client: userClient, userId } = await createTestUserWithRetry();
     createdUsers.push(userId);
     createdMemberships.push(userId);
 
@@ -170,8 +211,8 @@ describe('RLS policies', () => {
   });
 
   it('allows a manager to create tables for their restaurant but rejects a non-manager', async () => {
-    const { client: managerClient, userId: managerId } = await createTestUser();
-    const { client: plainClient, userId: plainId } = await createTestUser();
+    const { client: managerClient, userId: managerId } = await createTestUserWithRetry();
+    const { client: plainClient, userId: plainId } = await createTestUserWithRetry();
     createdUsers.push(managerId, plainId);
     createdMemberships.push(managerId);
 
@@ -231,7 +272,7 @@ describe('RLS policies', () => {
   });
 
   it('restricts a guest\'s direct reservation UPDATE to cancellation only', async () => {
-    const { client: guestClient, userId: guestId } = await createTestUser();
+    const { client: guestClient, userId: guestId } = await createTestUserWithRetry();
     createdUsers.push(guestId);
 
     const key = testId('test-guest-cancel-only');
@@ -356,7 +397,7 @@ describe('RLS policies', () => {
   it('prevents a guest from cancelling another user\'s reservation via direct UPDATE', async () => {
     // Create both users concurrently — the signups are independent.
     const [{ client: clientA, userId: userA }, { client: clientB, userId: userB }] =
-      await Promise.all([createTestUser(), createTestUser()]);
+      await Promise.all([createTestUserWithRetry(), createTestUserWithRetry()]);
     createdUsers.push(userA, userB);
 
     const key = testId('test-guest-cancel-other');
