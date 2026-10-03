@@ -84,6 +84,12 @@ export default function StaffPage() {
         >
           Settings
         </a>
+        <a
+          href="/staff/team"
+          className="text-sm font-medium text-foreground-muted underline-offset-4 hover:text-foreground hover:underline"
+        >
+          Team
+        </a>
       </nav>
       <div className="mt-6">
         <StaffOverview />
