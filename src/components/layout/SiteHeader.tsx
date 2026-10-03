@@ -27,6 +27,11 @@ import { Button } from '@/components/ui/Button';
  * decorative (aria-hidden); the link's aria-label contains the visible
  * brand text (WCAG 2.5.3 label-in-name), and hover/focus motion is
  * disabled under reduced motion.
+ *
+ * Public nav: "Our Team" (/team) sits beside Restaurants. Its active
+ * state reuses the same guarded pathname read as the switcher (single
+ * call per render, null in tests), so no additional pathname plumbing
+ * exists purely for styling.
  */
 
 const NAV_LINK_CLASSES =
@@ -60,7 +65,9 @@ function isStaffPath(pathname: string | null): boolean {
 
 export function SiteHeader() {
   const { user, loading, signOut } = useAuth();
-  const onStaffPage = isStaffPath(readPathname());
+  const pathname = readPathname();
+  const onStaffPage = isStaffPath(pathname);
+  const onTeamPage = pathname === '/team';
 
   return (
     <header className="border-b border-border">
@@ -91,6 +98,15 @@ export function SiteHeader() {
         <nav aria-label="Primary" className="flex flex-wrap items-center gap-1">
           <Link href="/restaurants" className={NAV_LINK_CLASSES}>
             Restaurants
+          </Link>
+          <Link
+            href="/team"
+            className={
+              onTeamPage ? `${NAV_LINK_CLASSES} bg-surface-raised font-medium text-foreground` : NAV_LINK_CLASSES
+            }
+            aria-current={onTeamPage ? 'page' : undefined}
+          >
+            Our Team
           </Link>
           {loading ? null : user ? (
             <>
