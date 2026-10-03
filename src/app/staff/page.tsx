@@ -31,6 +31,24 @@ export default function StaffPage() {
   return (
     <div>
       <h1 className="text-3xl font-bold text-foreground">Staff Dashboard</h1>
+      <nav
+        aria-label="Staff sections"
+        className="mt-4 flex flex-wrap gap-4 border-b border-border pb-2"
+      >
+        <a
+          href="/staff"
+          aria-current="page"
+          className="text-sm font-medium text-foreground underline underline-offset-4"
+        >
+          Overview
+        </a>
+        <a
+          href="/staff/tables"
+          className="text-sm font-medium text-foreground-muted underline-offset-4 hover:text-foreground hover:underline"
+        >
+          Tables
+        </a>
+      </nav>
       <div className="mt-6">
         <StaffOverview />
       </div>
