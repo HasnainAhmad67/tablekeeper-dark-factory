@@ -7,9 +7,10 @@ import { Button } from '@/components/ui/Button';
 
 /**
  * Auth-aware site header. Renders guest links (Log in / Sign up) or the
- * signed-in identity (email + Sign out) from the cookie session via
- * AuthProvider. While the session resolves, auth-dependent items are
- * omitted (no layout shift, no stale flash).
+ * signed-in navigation (My Reservations, email + Sign out) from the cookie
+ * session via AuthProvider. While the session resolves, auth-dependent
+ * items are omitted (no layout shift, no stale flash) — the My Reservations
+ * link is therefore visible only to authenticated users.
  */
 
 const NAV_LINK_CLASSES =
@@ -30,6 +31,9 @@ export function SiteHeader() {
           </Link>
           {loading ? null : user ? (
             <>
+              <Link href="/reservations" className={NAV_LINK_CLASSES}>
+                My Reservations
+              </Link>
               <span className="px-2 text-sm text-foreground-muted">{user.email ?? 'Signed in'}</span>
               <Button
                 variant="ghost"
