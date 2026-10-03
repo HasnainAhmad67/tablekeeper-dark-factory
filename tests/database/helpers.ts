@@ -169,6 +169,48 @@ export async function createTestUser(): Promise<{
   return { client, userId: data.user!.id, email };
 }
 
+const SIGNUP_MAX_RETRIES = 3;
+const SIGNUP_RETRY_DELAY_MS = 2000;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * createTestUser with bounded retries for GoTrue signup throttling.
+ *
+ * The remote Auth service rate-limits anonymous signups (429): a full-suite
+ * run makes ~40 signups, and rapid consecutive runs spill into the next
+ * run's signups. Retry up to 3 times with a fixed 2s delay — bounded so the
+ * worst case for a test that creates two users sequentially stays well
+ * under the 30s testTimeout — then rethrow the original error so a real
+ * failure still surfaces instead of skipping. Centralized here so suites
+ * stop duplicating the loop inline (rls, group-writes, and hours-api each
+ * carried a copy); suites that want no retry keep calling createTestUser.
+ */
+export async function createTestUserWithRetry(): Promise<
+  Awaited<ReturnType<typeof createTestUser>>
+> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= SIGNUP_MAX_RETRIES + 1; attempt++) {
+    try {
+      return await createTestUser();
+    } catch (err) {
+      lastError = err;
+      if (attempt > SIGNUP_MAX_RETRIES) {
+        break;
+      }
+      console.warn(
+        `createTestUser failed (attempt ${attempt}/${SIGNUP_MAX_RETRIES + 1}), ` +
+          `retrying in ${SIGNUP_RETRY_DELAY_MS}ms:`,
+        err instanceof Error ? err.message : err,
+      );
+      await sleep(SIGNUP_RETRY_DELAY_MS);
+    }
+  }
+  throw lastError;
+}
+
 /**
  * Delete a test user via the GoTrue admin API (service role).
  * Best-effort: a failure only warns so it never masks a real test result.

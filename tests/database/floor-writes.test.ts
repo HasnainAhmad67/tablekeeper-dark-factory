@@ -2,6 +2,7 @@ import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import {
   createServiceClient,
   createTestUser,
+  createTestUserWithRetry,
   deleteTestUser,
   cleanupTestData,
   testId,
@@ -41,22 +42,22 @@ beforeAll(async () => {
     throw new Error(`Database connection failed: ${error.message}`);
   }
 
-  manager = await createTestUser();
+  manager = await createTestUserWithRetry();
   createdUsers.push(manager.userId);
   createdMemberUserIds.push(manager.userId);
   await grantRole(manager.userId, 'manager');
 
-  owner = await createTestUser();
+  owner = await createTestUserWithRetry();
   createdUsers.push(owner.userId);
   createdMemberUserIds.push(owner.userId);
   await grantRole(owner.userId, 'owner');
 
-  staff = await createTestUser();
+  staff = await createTestUserWithRetry();
   createdUsers.push(staff.userId);
   createdMemberUserIds.push(staff.userId);
   await grantRole(staff.userId, 'staff');
 
-  nonMember = await createTestUser();
+  nonMember = await createTestUserWithRetry();
   createdUsers.push(nonMember.userId);
 });
 

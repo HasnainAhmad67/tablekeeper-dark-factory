@@ -2,7 +2,7 @@ import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import {
   createServiceClient,
   createAnonClient,
-  createTestUser,
+  createTestUserWithRetry,
   deleteTestUser,
   testId,
   cleanupByIdempotencyKeys,
@@ -44,47 +44,6 @@ beforeAll(async () => {
     throw new Error(`Database connection failed: ${error.message}`);
   }
 });
-
-/**
- * createTestUser with bounded retries for GoTrue signup throttling.
- *
- * The remote Auth service rate-limits anonymous signups (429); when the
- * full suite runs, earlier files' ~40 signups can spill into this file and
- * fail it outright (helpers.ts's createTestUser throws on any signup
- * error). Retry up to 3 times with a fixed 2s delay — bounded so the
- * worst case for a test that creates two users sequentially stays well
- * under the 30s testTimeout — then rethrow the original error so a real
- * failure still surfaces instead of skipping.
- */
-const SIGNUP_MAX_RETRIES = 3;
-const SIGNUP_RETRY_DELAY_MS = 2000;
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function createTestUserWithRetry(): Promise<
-  Awaited<ReturnType<typeof createTestUser>>
-> {
-  let lastError: unknown;
-  for (let attempt = 1; attempt <= SIGNUP_MAX_RETRIES + 1; attempt++) {
-    try {
-      return await createTestUser();
-    } catch (err) {
-      lastError = err;
-      if (attempt > SIGNUP_MAX_RETRIES) {
-        break;
-      }
-      console.warn(
-        `createTestUser failed (attempt ${attempt}/${SIGNUP_MAX_RETRIES + 1}), ` +
-          `retrying in ${SIGNUP_RETRY_DELAY_MS}ms:`,
-        err instanceof Error ? err.message : err,
-      );
-      await sleep(SIGNUP_RETRY_DELAY_MS);
-    }
-  }
-  throw lastError;
-}
 
 describe('RLS policies', () => {
   it('enforces guest isolation - a guest cannot read or modify another guest\'s reservations', async () => {

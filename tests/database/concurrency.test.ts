@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import {
   createServiceClient,
-  createTestUser,
+  createTestUserWithRetry,
   deleteTestUser,
   testId,
   cleanupByIdempotencyKeys,
@@ -45,7 +45,7 @@ beforeAll(async () => {
 
 describe('concurrency acceptance', () => {
   it('allows exactly one of N parallel booking requests for the same table to succeed', async () => {
-    const { client: userClient, userId } = await createTestUser();
+    const { client: userClient, userId } = await createTestUserWithRetry();
     createdUsers.push(userId);
 
     const N = 3;
@@ -95,7 +95,7 @@ describe('concurrency acceptance', () => {
   });
 
   it('repeated attempts with the same idempotency key return the same reservation without duplicating bookings', async () => {
-    const { client: userClient, userId } = await createTestUser();
+    const { client: userClient, userId } = await createTestUserWithRetry();
     createdUsers.push(userId);
 
     const key = testId('test-idempotent');

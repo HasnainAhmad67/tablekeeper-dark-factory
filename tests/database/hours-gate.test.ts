@@ -4,7 +4,7 @@ import {
   cleanupByIdempotencyKeys,
   cleanupTestData,
   createServiceClient,
-  createTestUser,
+  createTestUserWithRetry,
   deleteTestUser,
   SEED,
   testId,
@@ -76,7 +76,7 @@ beforeAll(async () => {
     );
   }
 
-  const created = await createTestUser();
+  const created = await createTestUserWithRetry();
   userClient = created.client;
   userId = created.userId;
 

@@ -2,6 +2,7 @@ import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import {
   createServiceClient,
   createTestUser,
+  createTestUserWithRetry,
   deleteTestUser,
   cleanupTestData,
   testId,
@@ -40,11 +41,12 @@ let nonMember!: TestUser;
  * Remote-setup resilience for this file's hooks (mirrors rls.test.ts).
  *
  * The hooks share a throttled host with the parallel test files: the
- * connection probe and fixture insert return errors instead of throwing,
- * and the four GoTrue signups hit the anonymous-signup rate limit. Both get
- * three retries, 2s apart, before the hook fails for real — a transient
+ * connection probe and fixture insert return errors instead of throwing.
+ * Both get three retries, 2s apart, before the hook fails for real — a transient
  * slow round-trip no longer aborts the file (previously the 30s hookTimeout
  * turned it into 8 skipped tests; hookTimeout is now 60s in vitest.config).
+ * The file's four GoTrue signups go through the centralized
+ * helpers.createTestUserWithRetry (same 3×2s bounds).
  */
 const SETUP_MAX_RETRIES = 3;
 const SETUP_RETRY_DELAY_MS = 2000;
@@ -73,13 +75,6 @@ async function retrySetup<T>(label: string, fn: () => Promise<T>): Promise<T> {
     }
   }
   throw lastError;
-}
-
-/** createTestUser bounded-retry for GoTrue signup throttling (see rls.test.ts). */
-async function createTestUserWithRetry(): Promise<
-  Awaited<ReturnType<typeof createTestUser>>
-> {
-  return retrySetup('createTestUser', () => createTestUser());
 }
 
 beforeAll(async () => {

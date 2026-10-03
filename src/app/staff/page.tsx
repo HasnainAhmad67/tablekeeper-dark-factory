@@ -55,6 +55,12 @@ export default function StaffPage() {
           Groups
         </a>
         <a
+          href="/staff/floor-2d"
+          className="text-sm font-medium text-foreground-muted underline-offset-4 hover:text-foreground hover:underline"
+        >
+          Floor
+        </a>
+        <a
           href="/staff/reservations"
           className="text-sm font-medium text-foreground-muted underline-offset-4 hover:text-foreground hover:underline"
         >

@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import {
   createServiceClient,
-  createTestUser,
+  createTestUserWithRetry,
   deleteTestUser,
   cleanupTestData,
   SEED,
@@ -38,7 +38,7 @@ beforeAll(async () => {
 
 describe('staff floor read access', () => {
   it('returns an empty list for a user with no restaurant memberships', async () => {
-    const { client, userId } = await createTestUser();
+    const { client, userId } = await createTestUserWithRetry();
     createdUsers.push(userId);
 
     const restaurants = await listStaffRestaurants(client, userId);
@@ -46,7 +46,7 @@ describe('staff floor read access', () => {
   });
 
   it('lists only the restaurants the caller belongs to, with the expected shape', async () => {
-    const { client, userId } = await createTestUser();
+    const { client, userId } = await createTestUserWithRetry();
     createdUsers.push(userId);
     createdMemberUserIds.push(userId);
 
@@ -66,8 +66,8 @@ describe('staff floor read access', () => {
   });
 
   it('returns restaurant tables for staff and rejects non-members (tenant isolation)', async () => {
-    const { client: staffClient, userId: staffId } = await createTestUser();
-    const { client: outsiderClient, userId: outsiderId } = await createTestUser();
+    const { client: staffClient, userId: staffId } = await createTestUserWithRetry();
+    const { client: outsiderClient, userId: outsiderId } = await createTestUserWithRetry();
     createdUsers.push(staffId, outsiderId);
     createdMemberUserIds.push(staffId);
 
@@ -98,7 +98,7 @@ describe('staff floor read access', () => {
   });
 
   it('returns table groups with their member table ids and rejects non-members', async () => {
-    const { client: staffClient, userId: staffId } = await createTestUser();
+    const { client: staffClient, userId: staffId } = await createTestUserWithRetry();
     createdUsers.push(staffId);
     createdMemberUserIds.push(staffId);
 
@@ -123,7 +123,7 @@ describe('staff floor read access', () => {
   });
 
   it('returns floor sections scoped to the restaurant and rejects non-members', async () => {
-    const { client: staffClient, userId: staffId } = await createTestUser();
+    const { client: staffClient, userId: staffId } = await createTestUserWithRetry();
     createdUsers.push(staffId);
     createdMemberUserIds.push(staffId);
 

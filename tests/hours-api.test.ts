@@ -5,7 +5,7 @@ import {
   cleanupTestData,
   createAnonClient,
   createServiceClient,
-  createTestUser,
+  createTestUserWithRetry,
   deleteTestUser,
   testId,
   SEED,
@@ -38,42 +38,6 @@ vi.mock('@/lib/supabase/server', () => ({
 import { GET, PUT } from '@/app/api/restaurants/[restaurantId]/hours/route';
 
 const serviceClient = createServiceClient();
-
-/**
- * createTestUser with bounded retries for GoTrue signup throttling — the
- * same helper pattern as rls.test.ts/group-writes.test.ts (a full-suite
- * run makes ~40 signups and rapid runs can trip 429s). Max 3 retries,
- * fixed 2s delay, then the original error surfaces.
- */
-const SIGNUP_MAX_RETRIES = 3;
-const SIGNUP_RETRY_DELAY_MS = 2000;
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function createTestUserWithRetry(): Promise<
-  Awaited<ReturnType<typeof createTestUser>>
-> {
-  let lastError: unknown;
-  for (let attempt = 1; attempt <= SIGNUP_MAX_RETRIES + 1; attempt++) {
-    try {
-      return await createTestUser();
-    } catch (err) {
-      lastError = err;
-      if (attempt > SIGNUP_MAX_RETRIES) {
-        break;
-      }
-      console.warn(
-        `createTestUser failed (attempt ${attempt}/${SIGNUP_MAX_RETRIES + 1}), ` +
-          `retrying in ${SIGNUP_RETRY_DELAY_MS}ms:`,
-        err instanceof Error ? err.message : err,
-      );
-      await sleep(SIGNUP_RETRY_DELAY_MS);
-    }
-  }
-  throw lastError;
-}
 
 // Distinct from hours-gate's TEMP_RESTAURANT_ID (...999999999999): the two
 // files run in parallel and must not fight over the same row.

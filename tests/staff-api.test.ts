@@ -5,7 +5,7 @@ import {
   cleanupTestData,
   createAnonClient,
   createServiceClient,
-  createTestUser,
+  createTestUserWithRetry,
   deleteTestUser,
   SEED,
 } from './database/helpers';
@@ -48,7 +48,7 @@ function getStaffMe(client: SupabaseClient): Promise<Response> {
 }
 
 beforeAll(async () => {
-  member = await createTestUser();
+  member = await createTestUserWithRetry();
 });
 
 afterAll(async () => {

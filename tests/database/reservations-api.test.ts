@@ -5,7 +5,7 @@ import {
   cleanupTestData,
   createAnonClient,
   createServiceClient,
-  createTestUser,
+  createTestUserWithRetry,
   deleteTestUser,
   SEED,
   testId,
@@ -150,9 +150,9 @@ function patchReservation(
 }
 
 beforeAll(async () => {
-  guestA = await createTestUser();
-  guestB = await createTestUser();
-  staffUser = await createTestUser();
+  guestA = await createTestUserWithRetry();
+  guestB = await createTestUserWithRetry();
+  staffUser = await createTestUserWithRetry();
   anonClient = createAnonClient();
 
   const { error } = await serviceClient.from('restaurant_memberships').insert({
