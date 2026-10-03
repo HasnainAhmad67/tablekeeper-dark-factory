@@ -78,6 +78,12 @@ export default function StaffPage() {
         >
           Hours
         </a>
+        <a
+          href="/staff/settings"
+          className="text-sm font-medium text-foreground-muted underline-offset-4 hover:text-foreground hover:underline"
+        >
+          Settings
+        </a>
       </nav>
       <div className="mt-6">
         <StaffOverview />
