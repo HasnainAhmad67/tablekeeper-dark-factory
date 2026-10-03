@@ -58,11 +58,12 @@ describe('health check route', () => {
 });
 
 describe('home page', () => {
-  it('renders without Supabase credentials', () => {
+  it('renders the discovery landing without Supabase credentials', () => {
     const html = renderToString(<HomePage />);
     expect(html).toContain('Composable Floor');
-    expect(html).toContain('Design tokens');
-    expect(html).toContain('/api/health');
+    expect(html).toContain('Restaurants');
+    expect(html).toContain('Loading restaurants');
+    expect(html).not.toContain('Design tokens');
   });
 });
 
