@@ -175,6 +175,56 @@ describe('GET /api/restaurants — public discovery', () => {
     const noMatchBody = await noMatch.json();
     expect(noMatchBody.restaurants).toEqual([]);
   });
+
+  it('exposes all six seeded demo restaurants', async () => {
+    const response = await listRestaurants(new Request('http://localhost/api/restaurants'));
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.restaurants.length).toBeGreaterThanOrEqual(6);
+
+    const slugs = body.restaurants.map((row: { slug: string }) => row.slug);
+    expect(slugs).toEqual(
+      expect.arrayContaining([
+        'second-test-bistro',
+        'test-kitchen',
+        'casa-verde',
+        'sora-sushi-house',
+        'garden-table',
+        'ember-and-oak',
+      ]),
+    );
+  });
+
+  it('finds every demo restaurant by name and by cuisine', async () => {
+    // Each term is unique to one record (search covers name + cuisine
+    // only), so every lookup must resolve to exactly its row.
+    const cases: Array<[string, string]> = [
+      ['Second Test Bistro', 'second-test-bistro'],
+      ['French', 'second-test-bistro'],
+      ['Test Kitchen', 'test-kitchen'],
+      ['American', 'test-kitchen'],
+      ['Casa Verde', 'casa-verde'],
+      ['Italian', 'casa-verde'],
+      ['Sora Sushi House', 'sora-sushi-house'],
+      ['Japanese', 'sora-sushi-house'],
+      ['Garden Table', 'garden-table'],
+      ['Contemporary', 'garden-table'],
+      ['Ember', 'ember-and-oak'],
+      ['Steakhouse', 'ember-and-oak'],
+    ];
+
+    for (const [term, slug] of cases) {
+      const response = await listRestaurants(
+        new Request(`http://localhost/api/restaurants?search=${encodeURIComponent(term)}`),
+      );
+      expect(response.status).toBe(200);
+      const body = await response.json();
+      expect(
+        body.restaurants.map((row: { slug: string }) => row.slug),
+        `search: ${term}`,
+      ).toEqual([slug]);
+    }
+  });
 });
 
 describe('GET /api/restaurants/[restaurantId] — public detail', () => {

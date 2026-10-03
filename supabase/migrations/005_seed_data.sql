@@ -171,6 +171,56 @@ VALUES
   'second-bistro@example.com',
   'French',
   3
+),
+-- Fictional demo restaurants for the public discovery grid (no real
+-- identities, addresses, or phone numbers — 555 demo convention).
+(
+  'cccccccc-cccc-cccc-cccc-cccccccccccc',
+  'Casa Verde',
+  'casa-verde',
+  'America/New_York',
+  'A fictional demo restaurant for development and testing of Italian discovery',
+  '101 Demo Plaza, Test Village, TS 10101',
+  '555-3101',
+  'casa-verde@example.com',
+  'Italian',
+  2
+),
+(
+  'dddddddd-dddd-dddd-dddd-dddddddddddd',
+  'Sora Sushi House',
+  'sora-sushi-house',
+  'America/Los_Angeles',
+  'A fictional demo restaurant for development and testing of Japanese discovery',
+  '202 Demo Boulevard, Test Village, TS 20202',
+  '555-3102',
+  'sora-sushi-house@example.com',
+  'Japanese',
+  3
+),
+(
+  'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee',
+  'The Garden Table',
+  'garden-table',
+  'America/Denver',
+  'A fictional demo restaurant for development and testing of garden dining discovery',
+  '303 Demo Lane, Test Village, TS 30303',
+  '555-3103',
+  'garden-table@example.com',
+  'Contemporary / Garden dining',
+  3
+),
+(
+  'ffffffff-ffff-ffff-ffff-ffffffffffff',
+  'Ember & Oak',
+  'ember-and-oak',
+  'America/Chicago',
+  'A fictional demo restaurant for development and testing of steakhouse discovery',
+  '404 Demo Court, Test Village, TS 40404',
+  '555-3104',
+  'ember-and-oak@example.com',
+  'Steakhouse / Modern grill',
+  4
 )
 ON CONFLICT (id) DO NOTHING;
 
