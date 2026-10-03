@@ -15,16 +15,48 @@ import { Field } from '@/components/ui/Field';
  * its "pending" label while email/password stays fully functional.
  *
  * Errors from the route's `{ error }` body render inline in a
- * role="alert"; success performs a full navigation to /dashboard so the
+ * role="alert"; success performs a full navigation to the resolved
+ * `returnTo` destination (M6 Polish — the auth gates across Phases 3/4
+ * write `/login?returnTo=<path>`), falling back to /dashboard so the
  * cookie written by the route is picked up on a clean mount.
  */
 
 export interface LoginFormProps {
   /** True when SUPABASE_AUTH_GOOGLE_CLIENT_ID is configured server-side. */
   googleConfigured: boolean;
+  /** Raw `returnTo` query value forwarded by the login page wrapper. */
+  returnTo?: string;
 }
 
-export function LoginForm({ googleConfigured }: LoginFormProps) {
+/**
+ * Resolve the post-login destination from the `returnTo` query value.
+ *
+ * The value is resolved against a fixed dummy origin and accepted only
+ * when the origin is unchanged; the result is therefore always a
+ * same-app path (pathname + query + fragment). That rejects every
+ * external form: absolute URLs (https://evil.example), protocol-relative
+ * ones (//evil.example), backslash smuggling ('/\\evil.example' — URL
+ * parsing treats backslash as a slash for special schemes), stripped
+ * tabs/newlines ('/\t/evil.example'), and opaque schemes (javascript:).
+ * Missing, malformed, or external values fall back to /dashboard.
+ */
+export function resolveReturnTo(returnTo: string | undefined): string {
+  if (!returnTo) {
+    return '/dashboard';
+  }
+  const BASE_ORIGIN = 'https://composable-floor.invalid';
+  try {
+    const url = new URL(returnTo, BASE_ORIGIN);
+    if (url.origin !== BASE_ORIGIN) {
+      return '/dashboard';
+    }
+    return url.pathname + url.search + url.hash;
+  } catch {
+    return '/dashboard';
+  }
+}
+
+export function LoginForm({ googleConfigured, returnTo }: LoginFormProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -56,7 +88,8 @@ export function LoginForm({ googleConfigured }: LoginFormProps) {
     }
 
     // Full navigation: AuthProvider remounts and reads the fresh cookie.
-    window.location.href = '/dashboard';
+    // Destination is the validated returnTo path (missing/external → /dashboard).
+    window.location.href = resolveReturnTo(returnTo);
   }
 
   return (
