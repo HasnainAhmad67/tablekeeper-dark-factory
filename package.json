@@ -27,6 +27,7 @@
     "next": "^15.5.26",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
+    "recharts": "^3.10.1",
     "three": "^0.186.1"
   },
   "devDependencies": {
