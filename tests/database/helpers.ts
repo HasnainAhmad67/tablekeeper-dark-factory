@@ -170,7 +170,10 @@ export async function createTestUser(): Promise<{
 }
 
 const SIGNUP_MAX_RETRIES = 3;
-const SIGNUP_RETRY_DELAY_MS = 2000;
+/** Exponential base: retries wait 2s, 4s, 8s (14s total) — see below. */
+const SIGNUP_RETRY_BASE_DELAY_MS = 2000;
+/** ±500ms randomization per retry so parallel suites don't retry in lockstep. */
+const SIGNUP_RETRY_JITTER_MS = 500;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -181,12 +184,18 @@ function sleep(ms: number): Promise<void> {
  *
  * The remote Auth service rate-limits anonymous signups (429): a full-suite
  * run makes ~40 signups, and rapid consecutive runs spill into the next
- * run's signups. Retry up to 3 times with a fixed 2s delay — bounded so the
- * worst case for a test that creates two users sequentially stays well
- * under the 30s testTimeout — then rethrow the original error so a real
- * failure still surfaces instead of skipping. Centralized here so suites
- * stop duplicating the loop inline (rls, group-writes, and hours-api each
- * carried a copy); suites that want no retry keep calling createTestUser.
+ * run's signups. The previous fixed schedule (3 retries × 2s = 6s total)
+ * was shorter than a hard rate-limit window, so exhausted retries kept
+ * failing tests. Retries now use exponential backoff — 2s, 4s, 8s
+ * (14s total across the same 3 retries) — each nudged by a random ±500ms
+ * of jitter so concurrently running suites don't hammer GoTrue in
+ * lockstep (thundering herd). Still bounded: the worst case (~15.5s of
+ * backoff plus 4 request round-trips) fits the 30s testTimeout and the
+ * 60s hookTimeout (vitest.config.ts), and exhausting all retries rethrows
+ * at ~20s — before the timeout — so a real failure still surfaces instead
+ * of skipping. Centralized here so suites stop duplicating the loop
+ * inline (rls, group-writes, and hours-api each carried a copy); suites
+ * that want no retry keep calling createTestUser.
  */
 export async function createTestUserWithRetry(): Promise<
   Awaited<ReturnType<typeof createTestUser>>
@@ -200,12 +209,18 @@ export async function createTestUserWithRetry(): Promise<
       if (attempt > SIGNUP_MAX_RETRIES) {
         break;
       }
+      // Exponential backoff: 2s, 4s, 8s for retries 1-3, each ±500ms jitter.
+      const backoffMs = SIGNUP_RETRY_BASE_DELAY_MS * 2 ** (attempt - 1);
+      const jitterMs = Math.round(
+        (Math.random() * 2 - 1) * SIGNUP_RETRY_JITTER_MS,
+      );
+      const delayMs = Math.max(0, backoffMs + jitterMs);
       console.warn(
         `createTestUser failed (attempt ${attempt}/${SIGNUP_MAX_RETRIES + 1}), ` +
-          `retrying in ${SIGNUP_RETRY_DELAY_MS}ms:`,
+          `retrying in ${delayMs}ms:`,
         err instanceof Error ? err.message : err,
       );
-      await sleep(SIGNUP_RETRY_DELAY_MS);
+      await sleep(delayMs);
     }
   }
   throw lastError;
