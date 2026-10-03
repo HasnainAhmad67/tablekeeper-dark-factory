@@ -21,6 +21,8 @@
  * whole local day (start through 23:59:59.999) before it is sent.
  */
 
+import { fetchStaffContext as fetchStaffContextShared } from '@/lib/fetchStaffContext';
+
 /** Statuses offered by the staff list filter (plan screen 21 actions). */
 export const RESERVATION_STATUS_OPTIONS = [
   { value: '', label: 'All statuses' },
@@ -50,7 +52,7 @@ export interface RestaurantBrief {
   timezone: string;
 }
 
-/** First membership from GET /api/staff/me (single-restaurant MVP). */
+/** Staff membership from GET /api/staff/me — selected restaurant, else first. */
 export interface StaffContext {
   id: string;
   name: string;
@@ -149,23 +151,14 @@ export function listReservationsPath(
   return `/api/reservations?${params.toString()}`;
 }
 
-/** First staff membership (single-restaurant MVP context), or null.
- *  Mirrors tables-client's fetchStaffContext — identity is a staff concern,
- *  not a tables one; a shared helper can dedupe these later if authorized. */
+/**
+ * Selected staff membership (stored restaurant id from the Restaurant
+ * Switcher, falling back to the first membership), or null. Shares the
+ * resolution with the other client libs via lib/fetchStaffContext; the
+ * request stays local so ReservationApiError statuses are preserved.
+ */
 export async function fetchStaffContext(): Promise<StaffContext | null> {
-  const body = await request('/api/staff/me');
-  const first = (Array.isArray(body.restaurants) ? body.restaurants : [])[0] as
-    | Partial<StaffContext>
-    | undefined;
-  if (!first || typeof first.id !== 'string') {
-    return null;
-  }
-  return {
-    id: first.id,
-    name: typeof first.name === 'string' ? first.name : '',
-    slug: typeof first.slug === 'string' ? first.slug : '',
-    role: typeof first.role === 'string' ? first.role : '',
-  };
+  return fetchStaffContextShared(request);
 }
 
 export async function fetchReservations(
